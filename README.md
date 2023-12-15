@@ -110,7 +110,7 @@ Jersey Servlet Container - це контейнер сервлетів, який 
 package userRestful;
 
 
-public class Users {
+public class User {
     private Integer user_id;
     private String user_name;
     private String user_email;
@@ -167,14 +167,14 @@ public class UserRepository {
             e.printStackTrace();
         }
     }
-    public List<Users> getUsers() {
-        List<Users> users = new ArrayList<>();
+    public List<User> getUsers() {
+        List<User> users = new ArrayList<>();
         String sql = "select * from users;";
         try {
             Statement stmt = con.createStatement();
             ResultSet rs = stmt.executeQuery(sql);
             while (rs.next()) {
-                Users u = new Users();
+                User u = new User();
                 u.setUser_id(rs.getInt(1));
                 u.setUser_name(rs.getString(2));
                 u.setUser_email(rs.getString(3));
@@ -214,6 +214,7 @@ import jakarta.ws.rs.core.MediaType;
 public class UserResource {
     UserRepository repo = new UserRepository();
     @GET
+    @Produces(MediaType.APPLICATION_JSON)
     public String getUsers() {
         return new Gson().toJson(repo.getUsers());
     }
@@ -282,12 +283,174 @@ RESTful веб-сервісів.
 - ПКМ по проєкту -> Run as -> Run on Server
 - обираємо існуючий сервер або створюємо новий (Apache Tomcat 10.0) -> Next -> Finish
 - маємо бачити повідомлення про те, що сервер запустився
-![img13.png](img%2Fimg13.png)
+![img13.png](img/img13.png)
 - переходимо за адресою http://localhost:8080/userRestful/rest/users (залежить від конфігурації вашого проєкту): userRestful -
 з display-name web.xml, /rest - з url-pattern, users - з UserResource.
 - маємо отримати пустий масив, бо ми ще не додавали юзерів.
-![img14.png](img%2Fimg14.png)
+![img14.png](img/img14.png)
 - додамо юзера з pgAdmin і подивимося на зміни
-![img15.png](img%2Fimg15.png)
-![img16.png](img%2Fimg16.png)
+![img15.png](img/img15.png)
+- 
+![img16.png](img/img16.png)
 # 5. Розширення функціональності сервісу.
+## Отримання User за user_id
+Додамо новий метод в класі UserResource: 
+```java
+class UserResource {
+    public User getUser(Integer id) {
+        User user = new User();
+        String sql = "select * from users where user_id=" + id;
+        try {
+            Statement stmt = con.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            while (rs.next()) {
+                user.setUser_id(rs.getInt(1));
+                user.setUser_name(rs.getString(2));
+                user.setUser_email(rs.getString(3));
+                user.setRole(rs.getString(4));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return user;
+    }
+}
+```
+Принцип дії той самий, що і в попереднього методу отримання всіх юзерів
+з цього класу - виконується SQL-запит і зчитується інстанс.
+
+Відповідні зміни до UserResource:
+```java
+class UserResource {
+    @GET
+    @Path("{user_id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public User getUser(@PathParam("user_id") Integer user_id) {
+        return repo.getUser(user_id);
+    }
+}
+```
+Ми вказали, що в адресі запиту після "/" треба вказати ідентифікатор шуканого
+користувача. Новий функціонал готовий до тестування:
+![img17.png](img/img17.png)
+
+
+## Додавання нового User-а
+Новий метод в класі UserRepository:
+```java
+class UserRepository {
+    public void create(User u) {
+        String sql = "insert into users values(?,?,?,?)";
+		try {
+			PreparedStatement pStatement = con.prepareStatement(sql);
+			pStatement.setInt(1, u.getUser_id());
+			pStatement.setString(2, u.getUser_name());
+			pStatement.setString(3, u.getUser_email());
+			pStatement.setString(4, u.getRole());
+			pStatement.executeUpdate();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+}
+```
+Тут з json-об'єкту будуть зчитуватися values, які вставляються в pStatement, після чого
+pStatement надсилається на виконання.
+
+Також новий метод в класі UserResource:
+```java
+class UserResource {
+    @POST
+    @Produces(MediaType.APPLICATION_JSON) 
+    @Consumes(MediaType.APPLICATION_JSON) 
+    public User createUser(User user) {
+        repo.create(user);
+        return user;
+	}
+}
+```
+Отже, зрозуміло, що тепер додавання нових видів CRUD-операцій - це додавання відповідних
+методів в UserRepository та UserResource.
+
+Тестуємо наш POST-метод. Для цього використаємо Postman.
+![img18.png](img/img18.png)
+
+![img19.png](img/img19.png)
+
+## Оновлення User-а
+Новий метод UserRepository:
+```java
+class UserRepository {
+    public void update(User u) {
+        String sql = "update users set user_name=?,email_id=?,role=? where user_id=?";
+        try {
+            PreparedStatement pStatement = con.prepareStatement(sql);
+            pStatement.setString(1, u.getUser_name());
+            pStatement.setString(2, u.getUser_email());
+            pStatement.setString(3, u.getRole());
+            pStatement.setInt(4, u.getUser_id());
+            pStatement.executeUpdate();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+Новий метод UserResource:
+```java
+class UserResource {
+    @PUT
+    @Path("{user_id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public User update(@PathParam("user_id") Integer user_id, User user) {
+        repo.update(user);
+        return user;
+    }
+}
+```
+Тут знову зчитуємо /id з URI(@Path + @PathParam).
+
+Тестуємо:
+![img20.png](img/img20.png)
+
+![img21.png](img/img21.png)
+## Видалення User-a
+Оновлення UserRepository:
+```java
+class UserRepository {
+    public void delete(Integer id) {
+        String sql = "delete from users where user_id=?";
+        try {
+            PreparedStatement pStatement = con.prepareStatement(sql);
+            pStatement.setInt(1, id);
+            pStatement.executeUpdate();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+Оновлення UserResource:
+```java \
+class UserResource {
+    @DELETE
+    @Path("{user_id}")
+    public void deleteUser(@PathParam("user_id") Integer user_id) {
+        repo.delete(user_id);
+    }
+}
+```
+Тестування:
+![img22.png](img/img22.png)
+
+![img23.png](img/img23.png)
+
+# 6. Висновки
+Отже, у ході створення цього проєкту ми ознайомилися з можливостями створення
+RESTful-сервісів мовою Java за допомогою Jersey Framework. Хоча найпопулярнішим 
+(і, напевно, трохи легшим в застосуванні) фреймворком для створення таких сервісів
+вважається Spring, Eclipse Jersey теж є потужним і поширеним інструментом.
+
+# 7. Корисні посилання
+1. https://youtu.be/MBYJ9gFtqt4?si=upf0hstOPgoI1loB 
