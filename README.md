@@ -134,7 +134,7 @@ public class User {
         this.user_email = user_email;
     }
     public String getRole() {
-        return user_email;
+        return role;
     }
     public void setRole(String role) {
         this.role = role;
